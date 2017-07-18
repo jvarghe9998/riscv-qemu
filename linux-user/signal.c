@@ -536,7 +536,7 @@ static void force_sig(int sig)
  * at the point of failure.
  */
 
-#if !defined(TARGET_RISCV || TARGET_ZPU)
+#if !defined(TARGET_RISCV) && !defined(TARGET_ZPU)
 static void force_sigsegv(int oldsig)
 {
     if (oldsig == SIGSEGV) {
@@ -6080,7 +6080,7 @@ badframe:
     return 0;
 }
 
-%#elif defined(TARGET_ZPU)
+#elif defined(TARGET_ZPU)
 
 /* Signal handler invocation must be transparent for the code being
    interrupted. Complete CPU (hart) state is saved on entry and restored
