@@ -1,0 +1,7 @@
+obj-y += zpu_rtc.o
+obj-y += zpu_int.o
+obj-y += htif/elf_symb.o
+obj-y += htif/htif.o
+obj-y += zpu_board.o
+obj-y += fiji_board.o
+obj-y += fiji_uart.o

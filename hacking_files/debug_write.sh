@@ -1,3 +1,3 @@
 #!/bin/bash
 
-./qemu-system-riscv -kernel ../hacking/vmlinux/vmlinux -nographic
+./qemu-system-zpu-kernel ../hacking/vmlinux/vmlinux -nographic

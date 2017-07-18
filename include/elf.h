@@ -114,6 +114,8 @@ typedef int64_t  Elf64_Sxword;
 
 #define EM_RISCV 243 /* RISC-V */
 
+#define EM_ZPU 248 /* Zyzyx NPU */
+
 /*
  * This is an interim value that we will use until the committee comes
  * up with a final number.

@@ -1621,6 +1621,9 @@ CpuInfoList *qmp_query_cpus(Error **errp)
 #elif defined(TARGET_RISCV)
         RISCVCPU *riscv_cpu = RISCV_CPU(cpu);
         CPURISCVState *env = &riscv_cpu->env;
+#elif defined(TARGET_ZPU)
+        ZPUCPU *zpu_cpu = ZPU_CPU(cpu);
+        CPUZPUState *env = &zpu_cpu->env;
 #elif defined(TARGET_MIPS)
         MIPSCPU *mips_cpu = MIPS_CPU(cpu);
         CPUMIPSState *env = &mips_cpu->env;
@@ -1657,6 +1660,9 @@ CpuInfoList *qmp_query_cpus(Error **errp)
 #elif defined(TARGET_RISCV)
         info->value->arch = CPU_INFO_ARCH_RISCV;
         info->value->u.riscv.pc = env->pc;
+#elif defined(TARGET_ZPU)
+        info->value->arch = CPU_INFO_ARCH_ZPU;
+        info->value->u.zpu.pc = env->pc;
 #else
         info->value->arch = CPU_INFO_ARCH_OTHER;
 #endif

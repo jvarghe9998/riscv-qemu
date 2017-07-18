@@ -64,6 +64,8 @@ int graphic_depth = 32;
 #define QEMU_ARCH QEMU_ARCH_MIPS
 #elif defined(TARGET_RISCV)
 #define QEMU_ARCH QEMU_ARCH_RISCV
+#elif defined(TARGET_ZPU)
+#define QEMU_ARCH QEMU_ARCH_ZPU
 #elif defined(TARGET_MOXIE)
 #define QEMU_ARCH QEMU_ARCH_MOXIE
 #elif defined(TARGET_OPENRISC)

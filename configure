@@ -5707,6 +5707,14 @@ case "$target_name" in
     TARGET_BASE_ARCH=riscv
     TARGET_ABI_DIR=riscv
   ;;
+  zpu32)
+    TARGET_BASE_ARCH=zpu
+    TARGET_ABI_DIR=zpu
+  ;;
+  zpu64)
+    TARGET_BASE_ARCH=zpu
+    TARGET_ABI_DIR=zpu
+  ;;
   sh4|sh4eb)
     TARGET_ARCH=sh4
     bflt="yes"
