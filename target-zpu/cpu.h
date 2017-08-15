@@ -64,6 +64,8 @@ typedef struct zpu_def_t zpu_def_t;
 typedef struct CPUZPUState CPUZPUState;
 struct CPUZPUState {
     target_ulong gpr[32];
+    target_ulong cc_eq;
+    target_ulong cc_lt;
     uint64_t fpr[32]; /* assume both F and D extensions */
     target_ulong pc;
     target_ulong load_res;

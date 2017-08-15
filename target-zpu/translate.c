@@ -36,7 +36,7 @@
 
 /* global register indices */
 static TCGv_ptr cpu_env;
-static TCGv cpu_gpr[32], cpu_pc;
+static TCGv_i32 cpu_gpr[32], cpu_pc, cond_eq, cond_lt;
 static TCGv_i64 cpu_fpr[32]; /* assume F and D extensions */
 static TCGv load_res;
 #ifdef CONFIG_USER_ONLY
@@ -66,10 +66,10 @@ enum {
 
 
 static const char * const regnames[] = {
-  "zero", "ra  ", "sp  ", "gp  ", "tp  ", "t0  ",  "t1  ",  "t2  ",
-  "s0  ", "s1  ", "a0  ", "a1  ", "a2  ", "a3  ",  "a4  ",  "a5  ",
-  "a6  ", "a7  ", "s2  ", "s3  ", "s4  ", "s5  ",  "s6  ",  "s7  ",
-  "s8  ", "s9  ", "s10 ", "s11 ", "t3  ", "t4  ",  "t5  ",  "t6  "
+  "r0 ", "r1  ", "r2  ", "r3  ", "r4  ", "r5 ",  "r6 ",  "r7  ",
+  "r8 ", "r9 ", "r10 ", "r11 ", "r12 ", "r13 ", "r14 ", "r15 ",
+  "r16 ", "r17 ", "r18 ", "r19 ", "r20 ", "r21 ", "r22 ", "r23 ",
+  "r24 ", "r25 ", "r26 ", "r27 ", "r28 ", "r29 ", "r30 ", "r31 "
 };
 
 static const char * const fpr_regnames[] = {
@@ -99,9 +99,10 @@ static const int tcg_memop_lookup[8] = {
 #define CASE_OP_32_64(X) case X
 #endif
 
+
 static inline void generate_exception(DisasContext *ctx, int excp)
 {
-    tcg_gen_movi_tl(cpu_pc, ctx->pc);
+    tcg_gen_movi_i32(cpu_pc, ctx->pc);
     TCGv_i32 helper_tmp = tcg_const_i32(excp);
     gen_helper_raise_exception(cpu_env, helper_tmp);
     tcg_temp_free_i32(helper_tmp);
@@ -109,7 +110,7 @@ static inline void generate_exception(DisasContext *ctx, int excp)
 
 static inline void generate_exception_mbadaddr(DisasContext *ctx, int excp)
 {
-    tcg_gen_movi_tl(cpu_pc, ctx->pc);
+    tcg_gen_movi_i32(cpu_pc, ctx->pc);
     TCGv_i32 helper_tmp = tcg_const_i32(excp);
     gen_helper_raise_exception_mbadaddr(cpu_env, helper_tmp, cpu_pc);
     tcg_temp_free_i32(helper_tmp);
@@ -154,27 +155,47 @@ static inline void gen_goto_tb(DisasContext *ctx, int n, target_ulong dest)
 /* Wrapper for getting reg values - need to check of reg is zero since
  * cpu_gpr[0] is not actually allocated
  */
-static inline void gen_get_gpr(TCGv t, int reg_num)
+static inline void gen_get_gpr(TCGv_i32 t, int reg_num)
 {
     if (reg_num == 0) {
-        tcg_gen_movi_tl(t, 0);
+        tcg_gen_movi_i32(t, 0);
     } else {
-        tcg_gen_mov_tl(t, cpu_gpr[reg_num]);
+        tcg_gen_mov_i32(t, cpu_gpr[reg_num]);
     }
 }
-
 /* Wrapper for setting reg values - need to check of reg is zero since
  * cpu_gpr[0] is not actually allocated. this is more for safety purposes,
  * since we usually avoid calling the OP_TYPE_gen function if we see a write to
  * $zero
  */
-static inline void gen_set_gpr(int reg_num_dst, TCGv t)
+static inline void gen_set_gpr(int reg_num_dst, TCGv_i32 t)
 {
     if (reg_num_dst != 0) {
-        tcg_gen_mov_tl(cpu_gpr[reg_num_dst], t);
+        tcg_gen_mov_i32(cpu_gpr[reg_num_dst], t);
     }
 }
 
+static inline void gen_get_eq(TCGv_i32 t)
+{
+    tcg_gen_mov_i32(t, cond_eq);
+}
+static inline void gen_set_eq(TCGv_i32 t)
+{
+    tcg_gen_mov_i32(cond_eq, t);
+}
+
+static inline void gen_get_lt(TCGv_i32 t)
+{
+    tcg_gen_mov_i32(t, cond_lt);
+}
+static inline void gen_set_lt(TCGv_i32 t)
+{
+    tcg_gen_mov_i32(cond_lt, t);
+}
+
+
+
+#ifdef JOEVTEST
 static void gen_mulhsu(TCGv ret, TCGv arg1, TCGv arg2)
 {
     TCGv rl = tcg_temp_new();
@@ -335,7 +356,7 @@ static void gen_arith(DisasContext *ctx, uint32_t opc, int rd, int rs1,
     case OPC_RISC_DIV:
         /* Handle by altering args to tcg_gen_div to produce req'd results:
          * For overflow: want source1 in source1 and 1 in source2
-         * For div by zero: want -1 in source1 and 1 in source2 -> -1 result */
+RR         * For div by zero: want -1 in source1 and 1 in source2 -> -1 result */
         cond1 = tcg_temp_new();
         cond2 = tcg_temp_new();
         zeroreg = tcg_const_tl(0);
@@ -1838,21 +1859,412 @@ static void decode_RV32_64G(CPUZPUState *env, DisasContext *ctx)
         break;
     }
 }
+#endif /* JOEVTEST */
+
+
+static void gen_arith(DisasContext *ctx, uint32_t opc)
+{
+    uint32_t inst = ctx->opcode;
+    int rd = extract32(inst, 10, 5);
+    int rs1 = extract32(inst, 5, 5);
+    int rs2 = extract32(inst, 0, 5);
+
+    TCGv_i32 source1, source2;
+    source1 = tcg_temp_new_i32();
+    source2 = tcg_temp_new_i32();
+    gen_get_gpr(source1, rs1);
+    gen_get_gpr(source2, rs2);
+
+    switch (opc) {
+    case OPC_ZPU_ADD:
+        tcg_gen_add_i32(source1, source1, source2);
+        break;
+    case OPC_ZPU_SUB:
+#if 1
+    {
+        TCGv_i32 cond_eq = tcg_temp_new_i32();
+        TCGv_i32 cond_lt = tcg_temp_new_i32();
+        tcg_gen_setcond_i32(TCG_COND_EQ, cond_eq, source1, source2);
+        tcg_gen_setcond_i32(TCG_COND_LT, cond_lt, source1, source2);
+        gen_set_eq(cond_eq);
+        gen_set_lt(cond_lt);
+        tcg_temp_free_i32(cond_eq);
+        tcg_temp_free_i32(cond_lt);
+    }
+#endif
+        tcg_gen_sub_i32(source1, source1, source2);
+        break;
+    case OPC_ZPU_MUL:
+        tcg_gen_mul_i32(source1, source1, source2);
+        break;
+    case OPC_ZPU_AND:
+        tcg_gen_and_i32(source1, source1, source2);
+        break;
+    case OPC_ZPU_OR:
+        tcg_gen_or_i32(source1, source1, source2);
+        break;
+    case OPC_ZPU_XOR:
+        tcg_gen_xor_i32(source1, source1, source2);
+        break;
+    case OPC_ZPU_SHL:
+        tcg_gen_andi_i32(source2, source2, 0x1f);
+        tcg_gen_shl_i32(source1, source1, source2);
+        break;
+    case OPC_ZPU_SHR:
+        tcg_gen_andi_i32(source2, source2, 0x1f);
+        tcg_gen_shr_i32(source1, source1, source2);
+        break;
+    default:
+        kill_unknown(ctx, ZPU_EXCP_ILLEGAL_INST);
+        break;
+    }
+
+    gen_set_gpr(rd, source1);
+    tcg_temp_free_i32(source1);
+    tcg_temp_free_i32(source2);
+}
+
+static void gen_arith_imm(DisasContext *ctx, uint32_t opc)
+{
+    uint32_t inst = ctx->opcode;
+    int rd = extract32(inst, 21, 5);
+    int rs1 = extract32(inst, 16, 5);
+    target_long imm  = 0;
+
+    switch (opc) {
+    case OPC_ZPU_ADDI:
+    case OPC_ZPU_SUBI:
+    case OPC_ZPU_MUL:
+        imm = sextract32(inst, 0, 16);
+        break;
+    case OPC_ZPU_ANDI:
+    case OPC_ZPU_ORI:
+    case OPC_ZPU_XORI:
+        imm = extract32(inst, 0, 16);
+        break;
+    case OPC_ZPU_SHLI:
+    case OPC_ZPU_SHRI:
+        imm = extract32(inst, 0, 5);
+        break;
+    default: 
+        kill_unknown(ctx, ZPU_EXCP_ILLEGAL_INST);
+        break;
+    }
+
+    TCGv_i32 source1;
+    source1 = tcg_temp_new_i32();
+    gen_get_gpr(source1, rs1);
+
+    switch (opc) {
+    case OPC_ZPU_ADDI:
+        tcg_gen_addi_i32(source1, source1, imm);
+        break;
+    case OPC_ZPU_SUBI:
+        tcg_gen_subi_i32(source1, source1, imm);
+        break;
+    case OPC_ZPU_MULI:
+        tcg_gen_muli_i32(source1, source1, imm);
+        break;
+    case OPC_ZPU_ANDI:
+        tcg_gen_andi_i32(source1, source1, imm);
+        break;
+    case OPC_ZPU_ORI:
+        tcg_gen_ori_i32(source1, source1, imm);
+        break;
+    case OPC_ZPU_XORI:
+        tcg_gen_xori_i32(source1, source1, imm);
+        break;
+    case OPC_ZPU_SHLI:
+        tcg_gen_shli_i32(source1, source1, imm);
+        break;
+    case OPC_ZPU_SHRI:
+        tcg_gen_shri_i32(source1, source1, imm); 
+        break;
+    default:
+        kill_unknown(ctx, ZPU_EXCP_ILLEGAL_INST);
+        break;
+    }
+
+    gen_set_gpr(rd, source1);
+    tcg_temp_free_i32(source1);
+}
+
+static void gen_mov(DisasContext *ctx, uint32_t opc)
+{
+    uint32_t inst = ctx->opcode;
+    int rd = extract32(inst, 21, 5);
+    int rs1 = extract32(inst, 16, 5);
+    target_long imm  = extract32(inst, 0, 16);
+    TCGv_i32 source1; 
+    TCGv_i32 source2; 
+    source1 = tcg_temp_new_i32();
+    source2 = tcg_temp_new_i32();
+
+    printf("gen_mov: rd = %d, rs = %d, imm = %x\n", rd, rs1, imm);
+
+    switch (opc) {
+    case OPC_ZPU_MOV:
+        gen_get_gpr(source1, rs1);
+        gen_set_gpr(rd, source1);
+        break;
+    case OPC_ZPU_MOVLO:
+        gen_get_gpr(source1, rd);
+        tcg_gen_andi_i32(source1, source1, 0x0000ffff);
+        tcg_gen_movi_i32(source2, imm);
+        tcg_gen_shli_i32(source2, source2, 16);
+        tcg_gen_or_i32(source1, source1, source2);
+        gen_set_gpr(rd, source1);
+        break;
+    case OPC_ZPU_MOVHI:
+        gen_get_gpr(source1, rd);
+        tcg_gen_andi_i32(source1, source1, 0xffff0000);
+        tcg_gen_ori_i32(source1, source1, imm);
+        gen_set_gpr(rd, source1);
+        break;
+    default: 
+        kill_unknown(ctx, ZPU_EXCP_ILLEGAL_INST);
+        break;
+    }
+
+    tcg_temp_free_i32(source1);
+    tcg_temp_free_i32(source2);
+}
+
+static void gen_load(DisasContext *ctx, uint32_t opc)
+{
+    uint32_t inst = ctx->opcode;
+    int rd = extract32(inst, 21, 5);
+    int rs1 = extract32(inst, 16, 5);
+    target_long imm = sextract32(inst, 0, 16);
+
+    TCGv t0 = tcg_temp_new();
+    TCGv t1 = tcg_temp_new();
+    gen_get_gpr(t0, rs1);
+    tcg_gen_addi_tl(t0, t0, imm);
+
+
+    switch (opc) {
+    case OPC_ZPU_LDB:
+        tcg_gen_qemu_ld8u(t1, t0, ctx->mem_idx);
+        break;
+    case OPC_ZPU_LDW:
+        tcg_gen_qemu_ld16u(t1, t0, ctx->mem_idx);
+        break;
+    case OPC_ZPU_LDD:
+        tcg_gen_qemu_ld32u(t1, t0, ctx->mem_idx);
+        break;
+    default:
+        kill_unknown(ctx, ZPU_EXCP_ILLEGAL_INST);
+        break;
+    }
+
+    gen_set_gpr(rd, t1);
+    tcg_temp_free(t0);
+    tcg_temp_free(t1);
+}
+
+static void gen_store(DisasContext *ctx, uint32_t opc)
+{
+    uint32_t inst = ctx->opcode;
+    int rs1 = extract32(inst, 21, 5);
+    int rs2 = extract32(inst, 16, 5);
+    target_long imm = sextract32(inst, 0, 16);
+
+    TCGv t0 = tcg_temp_new();
+    TCGv dat = tcg_temp_new();
+    gen_get_gpr(t0, rs1);
+    tcg_gen_addi_tl(t0, t0, imm);
+    gen_get_gpr(dat, rs2);
+
+    switch (opc) {
+    case OPC_ZPU_STB:
+        tcg_gen_qemu_st8(dat, t0, ctx->mem_idx);
+        break;
+    case OPC_ZPU_STW:
+        tcg_gen_qemu_st16(dat, t0, ctx->mem_idx);
+        break;
+    case OPC_ZPU_STD:
+        tcg_gen_qemu_st32(dat, t0, ctx->mem_idx);
+        break;
+    default:
+        kill_unknown(ctx, ZPU_EXCP_ILLEGAL_INST);
+        break;
+    }
+
+    tcg_temp_free(t0);
+    tcg_temp_free(dat);
+}
+
+static void gen_branch(DisasContext *ctx, uint32_t opc)
+{
+    uint32_t inst = ctx->opcode;
+    TCGLabel *l = gen_new_label();
+    TCGv source1, source2;
+    target_long bimm = sextract32(inst, 0, 26);
+    source1 = tcg_temp_new();
+    source2 = tcg_temp_new();
+    gen_get_eq(source1);
+    gen_get_lt(source2);
+
+
+    switch (opc) {
+    case OPC_ZPU_JMP:
+        tcg_gen_brcondi_tl(TCG_COND_ALWAYS, source1, 0, l);
+        break;
+    case OPC_ZPU_JMPEQ:
+        tcg_gen_brcondi_tl(TCG_COND_EQ, source1, 1, l);
+        break;
+    case OPC_ZPU_JMPNEQ:
+        tcg_gen_brcondi_tl(TCG_COND_EQ, source1, 0, l);
+        break;
+    case OPC_ZPU_JMPGT:
+        tcg_gen_brcondi_tl(TCG_COND_EQ, source2, 0, l);
+        break;
+    case OPC_ZPU_JMPLT:
+        tcg_gen_brcondi_tl(TCG_COND_EQ, source2, 1, l);
+        break;
+    default:
+        kill_unknown(ctx, ZPU_EXCP_ILLEGAL_INST);
+        break;
+    }
+
+    gen_goto_tb(ctx, 0, ctx->next_pc);
+
+    gen_set_label(l); /* branch taken */
+    gen_goto_tb(ctx, 1, ctx->pc + bimm);
+
+    tcg_temp_free(source1);
+    tcg_temp_free(source2);
+    ctx->bstate = BS_BRANCH;
+}
+
+static void gen_call_ret(DisasContext *ctx, uint32_t opc)
+{
+    uint32_t inst = ctx->opcode;
+    int rs1 = extract32(inst, 21, 5);
+    target_long imm = sextract32(inst, 0, 21);
+
+    switch (opc) {
+    case OPC_ZPU_CALL:
+        if (rs1 != 0) {
+            tcg_gen_movi_tl(cpu_gpr[rs1], ctx->next_pc);
+        }
+
+        gen_goto_tb(ctx, 0, ctx->pc + imm); /* must use this for safety */
+        break;
+    case OPC_ZPU_RET:
+        gen_get_gpr(cpu_pc, rs1);
+        tcg_gen_exit_tb(0);
+        break;
+    default:
+        kill_unknown(ctx, ZPU_EXCP_ILLEGAL_INST);
+        break;
+    }        
+    ctx->bstate = BS_BRANCH;
+}
+
+static void 
+decode_zpu_inst(CPUZPUState *env, DisasContext *ctx)
+{
+    uint32_t op;
+#if 0
+    int rs1;
+    int rs2;
+    int rd;
+    target_long imm;
+#endif
+    /* We do not do misaligned address check here: the address should never be
+     * misaligned at this point. Instructions that set PC must do the check,
+     * since epc must be the address of the instruction that caused us to
+     * perform the misaligned instruction fetch */
+
+    op = MASK_OP_MAJOR(ctx->opcode);
+#if 0
+    rs1 = GET_RS1(ctx->opcode);
+    rs2 = GET_RS2(ctx->opcode);
+    rd = GET_RD(ctx->opcode);
+    imm = GET_IMM(ctx->opcode);
+#endif
+
+    switch (op) {
+    case OPC_ZPU_NOP:
+        /* NOP: Do Nothing */
+        break;
+    case OPC_ZPU_HALT:
+        printf("HALT!!\n");
+        fflush(stdout);
+        ctx->bstate = BS_STOP;
+        tcg_gen_exit_tb(0);
+        exit(0);
+        //tcg_gen_exit_tb(0);
+        break;
+    case OPC_ZPU_ADD:
+    case OPC_ZPU_SUB:
+    case OPC_ZPU_MUL:
+    case OPC_ZPU_AND:
+    case OPC_ZPU_OR:
+    case OPC_ZPU_XOR:
+    case OPC_ZPU_SHL:
+    case OPC_ZPU_SHR:
+        gen_arith(ctx, op);
+        break;
+    case OPC_ZPU_ADDI:
+    case OPC_ZPU_SUBI:
+    case OPC_ZPU_MULI:
+    case OPC_ZPU_ANDI:
+    case OPC_ZPU_ORI:
+    case OPC_ZPU_XORI:
+    case OPC_ZPU_SHLI:
+    case OPC_ZPU_SHRI:
+        gen_arith_imm(ctx, op);
+        break;
+    case OPC_ZPU_LDB:
+    case OPC_ZPU_LDW:
+    case OPC_ZPU_LDD:
+    case OPC_ZPU_LDQ:
+        gen_load(ctx, op);
+        break;
+    case OPC_ZPU_STB:
+    case OPC_ZPU_STW:
+    case OPC_ZPU_STD:
+    case OPC_ZPU_STQ:
+        gen_store(ctx, op);
+        break;
+    case OPC_ZPU_MOV:
+    case OPC_ZPU_MOVHI:
+    case OPC_ZPU_MOVLO:
+    case OPC_ZPU_MOVSEL:
+        gen_mov(ctx, op);
+        break;
+    case OPC_ZPU_JMP:
+    case OPC_ZPU_JMPEQ:
+    case OPC_ZPU_JMPNEQ:
+    case OPC_ZPU_JMPGT:
+    case OPC_ZPU_JMPLT:
+         gen_branch(ctx, op); 
+        break;
+    case OPC_ZPU_CALL:
+    case OPC_ZPU_RET:
+        gen_call_ret(ctx, op);
+        break;
+        
+    default:
+        kill_unknown(ctx, ZPU_EXCP_ILLEGAL_INST);
+        break;
+    }
+}
+
+
+
 
 static void decode_opc(CPUZPUState *env, DisasContext *ctx)
 {
-    /* check for compressed insn */
-    if (extract32(ctx->opcode, 0, 2) != 3) {
-        if (!zpu_feature(env, ZPU_FEATURE_RVC)) {
-            kill_unknown(ctx, ZPU_EXCP_ILLEGAL_INST);
-        } else {
-            ctx->next_pc = ctx->pc + 2;
-            decode_RV32_64C(env, ctx);
-        }
-    } else {
         ctx->next_pc = ctx->pc + 4;
-        decode_RV32_64G(env, ctx);
-    }
+        //decode_RV32_64G(env, ctx);
+        //********************************** JOEVTEST **************************
+        printf("decode: 0x%x\n", ctx->opcode);
+        decode_zpu_inst(env, ctx);
+        zpu_cpu_dump_state(CPU(zpu_env_get_cpu(env)), stdout, fprintf, 0);
 }
 
 void gen_intermediate_code(CPUZPUState *env, TranslationBlock *tb)
@@ -1978,7 +2390,10 @@ void zpu_cpu_dump_state(CPUState *cs, FILE *f, fprintf_function cpu_fprintf,
             cpu_fprintf(f, "\n");
         }
     }
-
+    cpu_fprintf(f, " %s " TARGET_FMT_lx, "cc_eq", env->cc_eq);
+    cpu_fprintf(f, " %s " TARGET_FMT_lx, "cc_lt", env->cc_lt);
+    cpu_fprintf(f, "\n--------------------------------------\n");
+#if 0
 #ifndef CONFIG_USER_ONLY
     cpu_fprintf(f, " %s " TARGET_FMT_lx "\n", "MSTATUS ",
                 env->mstatus);
@@ -1995,6 +2410,7 @@ void zpu_cpu_dump_state(CPUState *cs, FILE *f, fprintf_function cpu_fprintf,
             cpu_fprintf(f, "\n");
         }
     }
+#endif /* 0 */
 }
 
 void zpu_tcg_init(void)
@@ -2017,6 +2433,10 @@ void zpu_tcg_init(void)
         cpu_gpr[i] = tcg_global_mem_new(cpu_env,
                              offsetof(CPUZPUState, gpr[i]), regnames[i]);
     }
+    cond_eq = tcg_global_mem_new(cpu_env,
+                                 offsetof(CPUZPUState, cc_eq), "cc_eq");
+    cond_lt = tcg_global_mem_new(cpu_env,
+                                 offsetof(CPUZPUState, cc_lt), "cc_lt");
 
     for (i = 0; i < 32; i++) {
         cpu_fpr[i] = tcg_global_mem_new_i64(cpu_env,
