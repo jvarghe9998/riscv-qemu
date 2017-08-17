@@ -2191,11 +2191,15 @@ decode_zpu_inst(CPUZPUState *env, DisasContext *ctx)
         /* NOP: Do Nothing */
         break;
     case OPC_ZPU_HALT:
+#if 0
         printf("HALT!!\n");
         fflush(stdout);
-        ctx->bstate = BS_STOP;
         tcg_gen_exit_tb(0);
-        exit(0);
+#endif
+        ctx->bstate = BS_STOP;
+        kill_unknown(ctx, ZPU_EXCP_EXIT);
+        break;
+
         //tcg_gen_exit_tb(0);
         break;
     case OPC_ZPU_ADD:
@@ -2261,9 +2265,9 @@ static void decode_opc(CPUZPUState *env, DisasContext *ctx)
 {
         ctx->next_pc = ctx->pc + 4;
         //decode_RV32_64G(env, ctx);
+        decode_zpu_inst(env, ctx);
         //********************************** JOEVTEST **************************
         printf("decode: 0x%x\n", ctx->opcode);
-        decode_zpu_inst(env, ctx);
         zpu_cpu_dump_state(CPU(zpu_env_get_cpu(env)), stdout, fprintf, 0);
 }
 

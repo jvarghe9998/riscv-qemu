@@ -43,6 +43,7 @@
 #define ZPU_EXCP_S_ECALL                 0x9
 #define ZPU_EXCP_H_ECALL                 0xa
 #define ZPU_EXCP_M_ECALL                 0xb
+#define ZPU_EXCP_EXIT                        0xddd
 
 
 #define TRANSLATE_FAIL 1

@@ -3957,6 +3957,9 @@ void cpu_loop(CPUZPUState *env)
                 goto gdbstep;
             }
             break;
+        case ZPU_EXCP_EXIT: 
+            exit(0);
+            break;
         case ZPU_EXCP_ILLEGAL_INST:
             signum = TARGET_SIGILL;
             sigcode = TARGET_ILL_ILLOPC;
