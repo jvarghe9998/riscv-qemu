@@ -96,16 +96,8 @@ static void zpu_cpu_disas_set_info(CPUState *s, disassemble_info *info) {
 static void zpu_cpu_realizefn(DeviceState *dev, Error **errp)
 {
     CPUState *cs = CPU(dev);
-    ZPUCPU *cpu = ZPU_CPU(dev);
     ZPUCPUClass *mcc = ZPU_CPU_GET_CLASS(dev);
-    CPUZPUState *env = &cpu->env;
 
-    /* Enable GC ISA */
-    set_feature(env, ZPU_FEATURE_RVM);
-    set_feature(env, ZPU_FEATURE_RVA);
-    set_feature(env, ZPU_FEATURE_RVF);
-    set_feature(env, ZPU_FEATURE_RVD);
-    set_feature(env, ZPU_FEATURE_RVC);
 
     cpu_reset(cs);
     qemu_init_vcpu(cs);

@@ -178,11 +178,7 @@ static inline ZPUCPU *zpu_env_get_cpu(CPUZPUState *env)
 }
 
 enum zpu_features {
-    ZPU_FEATURE_RVM,
-    ZPU_FEATURE_RVA,
-    ZPU_FEATURE_RVF,
-    ZPU_FEATURE_RVD,
-    ZPU_FEATURE_RVC,
+    X,
 };
 
 static inline int zpu_feature(CPUZPUState *env, int feature)

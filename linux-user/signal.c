@@ -5958,7 +5958,9 @@ static void setup_sigcontext(struct target_sigcontext *sc, CPURISCVState *env)
     for(i = 0; i < 32; i++)
         __put_user(env->fpr[i], &sc->fpr[i]);
 
+#ifdef JOEV_CLEAN
     uint32_t fcsr = csr_read_helper(env, CSR_FCSR); /*riscv_get_fcsr(env);*/
+#endif /* JOEV_CLEAN */
     __put_user(fcsr, &sc->fcsr);
 }
 
@@ -6035,7 +6037,9 @@ static void restore_sigcontext(CPURISCVState *env, struct target_sigcontext *sc)
 
     uint32_t fcsr;
     __get_user(fcsr, &sc->fcsr);
+#ifdef JOEV_CLEAN
     csr_write_helper(env, fcsr, CSR_FCSR);
+#endif JOEV_CLEAN
 }
 
 static void restore_ucontext(CPURISCVState* env, struct target_ucontext* uc)
@@ -6146,7 +6150,11 @@ static void setup_sigcontext(struct target_sigcontext *sc, CPUZPUState *env)
     for(i = 0; i < 32; i++)
         __put_user(env->fpr[i], &sc->fpr[i]);
 
+#ifdef JOEV_CLEAN
     uint32_t fcsr = csr_read_helper(env, CSR_FCSR); /*zpu_get_fcsr(env);*/
+#else /* JOEV_CLEAN */
+    uint32_t fcsr = 0;
+#endif /* JOEV_CLEAN */
     __put_user(fcsr, &sc->fcsr);
 }
 
@@ -6221,9 +6229,11 @@ static void restore_sigcontext(CPUZPUState *env, struct target_sigcontext *sc)
     for (i = 0; i < 32; ++i)
         __get_user(env->fpr[i], &sc->fpr[i]);
 
+#ifdef JOEV_CLEAN
     uint32_t fcsr;
     __get_user(fcsr, &sc->fcsr);
     csr_write_helper(env, fcsr, CSR_FCSR);
+#endif /* JOEV_CLEAN */
 }
 
 static void restore_ucontext(CPUZPUState* env, struct target_ucontext* uc)

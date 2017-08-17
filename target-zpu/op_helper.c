@@ -66,6 +66,7 @@ void helper_raise_exception_mbadaddr(CPUZPUState *env, uint32_t exception,
 inline void csr_write_helper(CPUZPUState *env, target_ulong val_to_write,
         target_ulong csrno)
 {
+#ifdef JOEV_CLEAN
     #ifdef ZPU_DEBUG_PRINT
     fprintf(stderr, "Write CSR reg: 0x" TARGET_FMT_lx "\n", csrno);
     fprintf(stderr, "Write CSR val: 0x" TARGET_FMT_lx "\n", val_to_write);
@@ -284,6 +285,7 @@ inline void csr_write_helper(CPUZPUState *env, target_ulong val_to_write,
     default:
         helper_raise_exception(env, ZPU_EXCP_ILLEGAL_INST);
     }
+#endif /* JOEV_CLEAN */
 }
 
 /*
@@ -293,6 +295,7 @@ inline void csr_write_helper(CPUZPUState *env, target_ulong val_to_write,
  */
 inline target_ulong csr_read_helper(CPUZPUState *env, target_ulong csrno)
 {
+#ifdef JOEV_CLEAN
     #ifdef ZPU_DEBUG_PRINT
     fprintf(stderr, "READ CSR 0x%x\n", csrno);
     #endif
@@ -451,6 +454,9 @@ inline target_ulong csr_read_helper(CPUZPUState *env, target_ulong csrno)
     /* used by e.g. MTIME read */
     helper_raise_exception(env, ZPU_EXCP_ILLEGAL_INST);
     return 0;
+#else /* JOEV_CLEAN */
+    return 0;
+#endif /* JOEV_CLEAN */
 }
 
 /*
